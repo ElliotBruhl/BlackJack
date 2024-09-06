@@ -4,7 +4,7 @@
 #include <limits>
 using std::cout, std::cin, std::endl;
 
-int* newDeck() {
+static int* newDeck() {
     //make deck
     int* deck = new int[52];
     for (int i = 0; i < 52; i++) {
@@ -12,23 +12,23 @@ int* newDeck() {
             deck[i] = 10;
         }
         else {
-            deck[i] = i/4 + 1;
+            deck[i] = i / 4 + 1;
         }
     }
     //shuffle
     std::random_device rand;
     std::mt19937 rng(rand());
-    std::shuffle(deck, deck+52, rng);
+    std::shuffle(deck, deck + 52, rng);
 
     return deck;
 }
-void printDeck(int* deck) {
+static void printDeck(int* deck) {
     for (int i = 0; i < 52; i++) {
         cout << deck[i] << " ";
     }
     cout << endl;
 }
-int getPlayerNum() {
+static int getPlayerNum() {
     int numPlayers;
     while (true) {
         cout << "Enter number of Players (1-5 - excluding dealer): ";
@@ -44,26 +44,26 @@ int getPlayerNum() {
             cout << "Value out of range. Please enter a value between 1 and 8." << endl;
         }
         else {
-            return numPlayers+1; //add one for dealer
+            return numPlayers + 1; //add one for dealer
         }
     }
 }
-int** dealCards(int* deck, int numPlayers) {
+static int** dealCards(int* deck, int numPlayers) {
 
-    int** playerHands = new int*[numPlayers];
+    int** playerHands = new int* [numPlayers];
 
     for (int i = 0; i < numPlayers; i++) {
         playerHands[i] = new int[5];
-        playerHands[i][0] = deck[i*2];
-        playerHands[i][1] = deck[i*2+1];
+        playerHands[i][0] = deck[i * 2];
+        playerHands[i][1] = deck[i * 2 + 1];
         playerHands[i][2] = 0;
         playerHands[i][3] = 0;
         playerHands[i][4] = 0;
     }
-    deck += numPlayers*2; //point to next card in deck
+    deck += numPlayers * 2; //point to next card in deck
     return playerHands;
 }
-void viewCards(int** playerHands, int currentPlayer, int numPlayers) {
+static void viewCards(int** playerHands, int currentPlayer, int numPlayers, bool viewAll) {
     for (int i = 0; i < numPlayers; i++) {
         if (i == 0) {
             cout << "Dealer: ";
@@ -78,7 +78,7 @@ void viewCards(int** playerHands, int currentPlayer, int numPlayers) {
             if (playerHands[i][j] == 0) {
                 break;
             }
-            if (j == 0 && i != currentPlayer) {
+            if (j == 0 && i != currentPlayer && !viewAll) {
                 cout << "? ";
             }
             else {
@@ -88,7 +88,7 @@ void viewCards(int** playerHands, int currentPlayer, int numPlayers) {
         cout << endl;
     }
 }
-bool getMove() { //true for hit and false for stand
+static bool getMove() { //true for hit and false for stand
     char move;
 
     while (true) {
@@ -113,7 +113,7 @@ bool getMove() { //true for hit and false for stand
         }
     }
 }
-bool manageMove(int* myCards, int* deck) { //false for bust or stand, true otherwise
+static bool manageMove(int* myCards, int* deck) { //false for bust or stand, true otherwise
     bool move = getMove();
     if (!move) { //stand
         return false;
@@ -129,46 +129,100 @@ bool manageMove(int* myCards, int* deck) { //false for bust or stand, true other
         }
         sum += myCards[i];
     }
-    if (sum > 21 || myCards[4] != 0) {
-        return false;
+    return !(sum > 21 || myCards[4] != 0);
+}
+static bool manageMoveDealer(int* myCards, int* deck) {
+    int sum = 0;
+    bool hasAce = false;
+    for (int i = 0; i < 5; i++) {
+        if (myCards[i] == 1) {
+            hasAce = true;
+        }
+        else if (myCards[i] == 0) {
+            if (sum < 17 || (hasAce && sum < 7)) {
+                myCards[i] = deck[0];
+                deck++;
+            }
+            sum += myCards[i];
+            break;
+        }
+        sum += myCards[i];
     }
-    return true;
+    return !(sum > 21 || myCards[4] != 0);
+}
+static int getWinner(int** playerHands, int numPlayers) {
+    int sum;
+    bool hasAce;
+    int bestScore = 0;
+    int bestPlayer = -1;
+    for (int i = 0; i < numPlayers; i++) {
+        sum = 0;
+        hasAce = false;
+        for (int j = 0; j < 5; j++) {
+            if (playerHands[i][j] == 1) {
+                hasAce = true;
+            }
+            sum += playerHands[i][j];
+        }
+        if (hasAce && sum < 12) {
+            sum += 10;
+        }
+        if (sum < 22 && sum >= bestScore) {
+            bestScore = sum;
+            bestPlayer = i;
+        }
+    }
+    return bestPlayer;
 }
 int main() {
-
     //init
     int numPlayers = getPlayerNum(); //ask user for num of players
-    bool canPlay[numPlayers];
-    for (bool b : canPlay) {
-        b = true;
+    bool* canPlay = new bool[numPlayers];
+    for (int i = 0; i < numPlayers; i++) {
+        canPlay[i] = true;
     }
     int* deck = newDeck(); //generate shuffled deck
     int** playerHands = dealCards(deck, numPlayers); //give each player 2 cards
     bool gameState = true;
-
     //gameloop
     while (gameState) {
-        //dealer's turn (todo)
-        //human turn
-        for (int i = 1; i < numPlayers; i++) {
+
+        for (int i = 0; i < numPlayers; i++) {
             if (!canPlay[i]) {
                 continue;
             }
-            printDeck(deck);
-            viewCards(playerHands, i, numPlayers);
-            canPlay[i] = manageMove(playerHands[i], deck);
+            if (i == numPlayers - 1) { //dealer turn
+                canPlay[i] = manageMoveDealer(playerHands[i], deck);
+                viewCards(playerHands, -1, numPlayers, false);
+            }
+            else { //player turn
+                viewCards(playerHands, i, numPlayers, false);
+                canPlay[i] = manageMove(playerHands[i], deck);
+                viewCards(playerHands, i, numPlayers, false);
+            }
         }
         //update gamestate
         gameState = false;
-        for (bool b : canPlay) {
-            if (b) {
+        for (int i = 0; i < numPlayers; i++) {
+            if (canPlay[i]) {
                 gameState = true;
+                break;
             }
         }
     }
-    //gameover
-        //get winner (todo)
-    
+    //display game over
+    cout << "Game Over!" << endl;
+    viewCards(playerHands, -1, numPlayers, true);
+    int winner = getWinner(playerHands, numPlayers);
+    if (winner == numPlayers - 1) {
+        cout << "Dealer Wins!" << endl;
+    }
+    else if (winner == -1) {
+        cout << "Everybody busted!" << endl;
+    }
+    else {
+        cout << "Player" << winner << " Wins!" << endl;
+    }
     //clean up
     for (int i = 0; i < numPlayers; i++) {
         delete[] playerHands[i];
@@ -176,7 +230,10 @@ int main() {
     delete[] playerHands;
     delete[] deck;
     delete[] canPlay;
-
     //restart game
-    main();
+    if (playAgain()) {
+        main();
+    }
+
+    return 0;
 }
